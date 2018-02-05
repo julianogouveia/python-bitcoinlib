@@ -43,6 +43,7 @@ except ImportError:
     import urlparse
 
 import bitcoin
+import requests
 from bitcoin.core import COIN, x, lx, b2lx, CBlock, CBlockHeader, CTransaction, COutPoint, CTxOut
 from bitcoin.core.script import CScript
 from bitcoin.wallet import CBitcoinAddress, CBitcoinSecret
@@ -122,8 +123,11 @@ class BaseProxy(object):
     def __init__(self,
                  service_url=None,
                  service_port=None,
+                 rpc_username=None,
+                 rpc_password=None,
                  btc_conf_file=None,
-                 timeout=DEFAULT_HTTP_TIMEOUT):
+                 timeout=DEFAULT_HTTP_TIMEOUT,
+                 proxy=None):
 
         # Create a dummy connection early on so if __init__() fails prior to
         # __conn being created __del__() can detect the condition and handle it
@@ -177,8 +181,9 @@ class BaseProxy(object):
                         raise ValueError('Cookie file unusable (%s) and rpcpassword not specified in the configuration file: %r' % (err, btc_conf_file))
         else:
             url = urlparse.urlparse(service_url)
-            authpair = "%s:%s" % (url.username, url.password)
+            authpair = "%s:%s" % (rpc_username, rpc_password)
 
+        self.__proxy = proxy
         self.__service_url = service_url
         self.__url = urlparse.urlparse(service_url)
 
@@ -197,8 +202,7 @@ class BaseProxy(object):
             authpair = authpair.encode('utf8')
             self.__auth_header = b"Basic " + base64.b64encode(authpair)
 
-        self.__conn = httplib.HTTPConnection(self.__url.hostname, port=port,
-                                             timeout=timeout)
+        self.__conn = requests
 
     def _call(self, service_name, *args):
         self.__id_count += 1
@@ -217,7 +221,14 @@ class BaseProxy(object):
         if self.__auth_header is not None:
             headers['Authorization'] = self.__auth_header
 
-        self.__conn.request('POST', self.__url.path, postdata, headers)
+        proxies = None
+
+        if self.__proxy:
+            proxies ={
+                'http': self.__proxy
+            }
+
+        self.r = self.__conn.request('POST', self.__service_url, data=postdata, headers=headers, proxies=proxies)
 
         response = self._get_response()
         if response['error'] is not None:
@@ -244,21 +255,7 @@ class BaseProxy(object):
         return self._get_response()
 
     def _get_response(self):
-        http_response = self.__conn.getresponse()
-        if http_response is None:
-            raise JSONRPCError({
-                'code': -342, 'message': 'missing HTTP response from server'})
-
-        return json.loads(http_response.read().decode('utf8'),
-                          parse_float=decimal.Decimal)
-
-    def close(self):
-        if self.__conn is not None:
-            self.__conn.close()
-
-    def __del__(self):
-        if self.__conn is not None:
-            self.__conn.close()
+        return self.r.json()
 
 
 class RawProxy(BaseProxy):
