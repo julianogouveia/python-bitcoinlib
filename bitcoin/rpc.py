@@ -207,10 +207,10 @@ class BaseProxy(object):
     def _call(self, service_name, *args):
         self.__id_count += 1
 
-        postdata = json.dumps({'version': '1.1',
+        postdata = {'version': '1.1',
                                'method': service_name,
                                'params': args,
-                               'id': self.__id_count})
+                               'id': self.__id_count}
 
         headers = {
             'Host': self.__url.hostname,
@@ -228,7 +228,7 @@ class BaseProxy(object):
                 'http': self.__proxy
             }
 
-        self.r = self.__conn.request('POST', self.__service_url, data=postdata, headers=headers, proxies=proxies)
+        self.r = self.__conn.request('POST', self.__service_url, json=postdata, headers=headers, proxies=proxies)
 
         response = self._get_response()
         if response['error'] is not None:
@@ -255,6 +255,8 @@ class BaseProxy(object):
         return self._get_response()
 
     def _get_response(self):
+        print(self.r.status_code)
+        print(self.r.text)
         return self.r.json()
 
 
